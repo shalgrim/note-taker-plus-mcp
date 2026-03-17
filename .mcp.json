@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "note-taker-plus": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "note_taker_plus_mcp.server"
+      ],
+      "env": {}
+    }
+  }
+}
