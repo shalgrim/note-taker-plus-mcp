@@ -28,7 +28,3 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Compiled requirements
-requirements.txt
-requirements-dev.txt
