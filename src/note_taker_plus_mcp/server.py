@@ -2,6 +2,7 @@
 # Add tools one at a time: review_card, create_card, list_cards, list_tags
 # See CLAUDE.md for the full API reference and tool specifications.
 import os
+import sys
 from enum import Enum
 
 import httpx
@@ -34,15 +35,48 @@ mcp = fastmcp.FastMCP("note-taker-plus")
 
 
 @mcp.tool()
-async def get_due_cards(tag: str | None = None, limit: int = 20):
+async def get_card(card_id: int) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{BASE_API_URL}/cards/{card_id}", headers=HEADERS)
+    try:
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        print(f"Error: Status code {e.response.status_code} received.", file=sys.stderr)
+        print(f"Response text: {e.response.text}", file=sys.stderr)
+        return {
+            "error": f"API returned {e.response.status_code}",
+            "detail": e.response.text,
+        }
+    return r.json()
+
+
+@mcp.tool()
+async def get_due_cards(
+    tag: str | None = None, limit: int = 20
+) -> list[dict] | dict[str, str]:
     params: dict[str, int | str] = {"limit": limit}
     if tag is not None:
         params["tag"] = tag
 
-    async with httpx.AsyncClient() as client:
-        r = await client.get(
-            f"{BASE_API_URL}/cards/due", params=params, headers=HEADERS
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                f"{BASE_API_URL}/cards/due", params=params, headers=HEADERS
+            )
+    except httpx.RequestError as e:
+        print("Could not reach API", file=sys.stderr)
+        print(f"Detail: {str(e)}", file=sys.stderr)
+        return {"error": "Could not reach API", "detail": str(e)}
+
+    try:
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        print(f"Error: Status code {e.response.status_code} received.", file=sys.stderr)
+        print(f"Response text: {e.response.text}", file=sys.stderr)
+        return {
+            "error": f"API returned {e.response.status_code}",
+            "detail": e.response.text,
+        }
     return r.json()["cards"]
 
 
