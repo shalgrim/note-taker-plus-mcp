@@ -27,11 +27,12 @@ Wraps the [note-taker-plus](https://github.com/scotthalgrim/note-taker-plus) spa
 # Clone and set up
 git clone https://github.com/scotthalgrim/note-taker-plus-mcp.git
 cd note-taker-plus-mcp
-python -m venv .venv
-source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Create venv and install dependencies (including dev)
+uv sync --dev
+
+# Activate the venv
+source .venv/bin/activate
 
 # Configure
 cp .env.example .env
