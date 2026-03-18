@@ -1,9 +1,6 @@
-# Suggested approach:
-# Add tools one at a time: review_card, create_card, list_cards, list_tags
-# See CLAUDE.md for the full API reference and tool specifications.
 import os
 import sys
-from enum import Enum
+from enum import Enum, StrEnum, auto
 
 import httpx
 from dotenv import load_dotenv
@@ -27,6 +24,11 @@ class ReviewRating(int, Enum):
     EASY = 3
 
 
+class RequestType(StrEnum):
+    GET = auto()
+    POST = auto()
+
+
 BASE_API_URL = os.getenv("NOTE_TAKER_API_URL")
 API_KEY = os.getenv("NOTE_TAKER_API_KEY")
 HEADERS = {"X-API-KEY": API_KEY}
@@ -34,20 +36,44 @@ HEADERS = {"X-API-KEY": API_KEY}
 mcp = fastmcp.FastMCP("note-taker-plus")
 
 
+async def request(
+    request_type: RequestType,
+    url: str,
+    params: dict | None = None,
+    data: dict | None = None,
+) -> dict:
+    async with httpx.AsyncClient() as client:
+        params = params or {}
+        data = data or {}
+        request_params = {"params": params, "headers": HEADERS}
+        if request_type == RequestType.POST:
+            request_params["json"] = data
+
+        try:
+            r = await getattr(client, request_type.value)(url, **request_params)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print(
+                f"Error: Status code {e.response.status_code} received.",
+                file=sys.stderr,
+            )
+            print(f"Response text: {e.response.text}", file=sys.stderr)
+            return {
+                "error": f"API returned {e.response.status_code}",
+                "detail": e.response.text,
+            }
+        except httpx.RequestError as e:
+            print("Could not reach API", file=sys.stderr)
+            print(f"Detail: {str(e)}", file=sys.stderr)
+            return {"error": "Could not reach API", "detail": str(e)}
+
+        return r.json()
+
+
 @mcp.tool()
 async def get_card(card_id: int) -> dict:
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{BASE_API_URL}/cards/{card_id}", headers=HEADERS)
-    try:
-        r.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        print(f"Error: Status code {e.response.status_code} received.", file=sys.stderr)
-        print(f"Response text: {e.response.text}", file=sys.stderr)
-        return {
-            "error": f"API returned {e.response.status_code}",
-            "detail": e.response.text,
-        }
-    return r.json()
+    r = await request(RequestType.GET, f"{BASE_API_URL}/cards/{card_id}")
+    return r
 
 
 @mcp.tool()
@@ -57,38 +83,18 @@ async def get_due_cards(
     params: dict[str, int | str] = {"limit": limit}
     if tag is not None:
         params["tag"] = tag
-
-    try:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(
-                f"{BASE_API_URL}/cards/due", params=params, headers=HEADERS
-            )
-    except httpx.RequestError as e:
-        print("Could not reach API", file=sys.stderr)
-        print(f"Detail: {str(e)}", file=sys.stderr)
-        return {"error": "Could not reach API", "detail": str(e)}
-
-    try:
-        r.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        print(f"Error: Status code {e.response.status_code} received.", file=sys.stderr)
-        print(f"Response text: {e.response.text}", file=sys.stderr)
-        return {
-            "error": f"API returned {e.response.status_code}",
-            "detail": e.response.text,
-        }
-    return r.json()["cards"]
+    r = await request(RequestType.GET, f"{BASE_API_URL}/cards/due", params)
+    return r["cards"]
 
 
 @mcp.tool()
 async def review_card(card_id: int, rating: ReviewRating):
-    url = f"{BASE_API_URL}/cards/{card_id}/review"
     data = {"rating": rating.value}
+    r = await request(
+        RequestType.POST, f"{BASE_API_URL}/cards/{card_id}/review", data=data
+    )
 
-    async with httpx.AsyncClient() as client:
-        r = await client.post(url, json=data, headers=HEADERS)
-
-    return r.json()
+    return r
 
 
 if __name__ == "__main__":
